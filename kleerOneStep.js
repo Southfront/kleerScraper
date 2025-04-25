@@ -1,10 +1,6 @@
 import axios from "axios";
 import querystring from "querystring";
 import fs from "fs/promises";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Loggar in på Kleer och returnerar autentiseringstoken
