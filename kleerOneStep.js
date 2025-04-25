@@ -182,6 +182,50 @@ async function fetchMonthData(token, year, month) {
 }
 
 /**
+ * Fetches vacation data from the dashboard API
+ * @param {string} token - Auth token för Kleer
+ * @param {number} year - The year to fetch data for
+ * @returns {Promise<Object>} - The vacation data
+ */
+async function fetchVacationData(token, year) {
+  try {
+    const url =
+      "https://my.kleer.se/web2/dashboard?_data=routes%2F_secure._app%2B%2Fdashboard";
+
+    const headers = {
+      Accept: "*/*",
+      "Accept-Language": "sv-SE,sv;q=0.9,en-US;q=0.8,en;q=0.7,nb;q=0.6",
+      Connection: "keep-alive",
+      Cookie: `__auth2=${token}; CH-prefers-color-scheme=light`,
+      Referer: "https://my.kleer.se/web2/dashboard",
+      "Sec-Fetch-Dest": "empty",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Site": "same-origin",
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+      "sec-ch-ua":
+        '"Google Chrome";v="135", "Not-A.Brand";v="8", "Chromium";v="135"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"macOS"',
+    };
+
+    console.log(`Hämtar semesterdata för år ${year}...`);
+    const response = await axios.get(url, { headers });
+
+    if (!response.data || !response.data.vacation) {
+      console.warn("Varning: Ingen semesterdata hittades i svaret");
+      return null;
+    }
+
+    console.log("✓ Semesterdata hämtad");
+    return response.data.vacation;
+  } catch (error) {
+    console.error(`Fel vid hämtning av semesterdata:`, error.message);
+    return null;
+  }
+}
+
+/**
  * Fetches monthly data for a range of months
  * @param {string} token - Auth token för Kleer
  * @param {number} startYear - The year to start fetching from
@@ -446,6 +490,9 @@ async function getKleerYearDataWithCredentials(
       throw new Error(`Kunde inte hämta data för år ${year}`);
     }
 
+    // Hämta semesterdata från dashboard
+    const vacationData = await fetchVacationData(token, year);
+
     // Filter each month to only include days that belong to that month
     const filteredMonthsData = monthsData.map((monthObj) => {
       // Ensure days array exists
@@ -553,6 +600,17 @@ async function getKleerYearDataWithCredentials(
         events: [],
         holidays: [],
       };
+    }
+
+    // Lägg till semesterdata i sammanfattningen
+    if (vacationData) {
+      finalData.summary.vacation = vacationData;
+      console.log("✓ Semesterdata lagd till i sammanfattningen");
+    } else {
+      console.warn(
+        "Varning: Ingen semesterdata att lägga till i sammanfattningen"
+      );
+      finalData.summary.vacation = null;
     }
 
     if (!finalData.summary.events) finalData.summary.events = [];
