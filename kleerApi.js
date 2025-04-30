@@ -46,7 +46,7 @@ app.post("/api/kleer/year-data", async (req, res) => {
     // Skicka data direkt utan att gå via filen
     res.json(data);
   } catch (error) {
-    console.error("Error fetching Kleer data:", error);
+    console.error("Error fetching Kleer data:", error.message);
     res.status(500).json({
       error: "Kunde inte hämta data från Kleer",
       message: error.message,

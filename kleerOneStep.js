@@ -3,6 +3,47 @@ import querystring from "querystring";
 import fs from "fs/promises";
 
 /**
+ * Decode a token string (which might be a JWT or other format)
+ * @param {string} token - The token to decode
+ * @returns {Object|null} Decoded token data or null if unable to decode
+ */
+function decodeToken(token) {
+  try {
+    // Check if the token contains a period and only use the part before it
+    const tokenToDecode = token.includes(".") ? token.split(".")[0] : token;
+
+    // First try as JWT (format: header.payload.signature)
+    if (tokenToDecode.includes(".")) {
+      const parts = tokenToDecode.split(".");
+      if (parts.length >= 2) {
+        // JWT payload is the second part
+        const payload = parts[1];
+        // Base64 decode the payload
+        const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+        const jsonPayload = Buffer.from(base64, "base64").toString("utf8");
+        return JSON.parse(jsonPayload);
+      }
+    }
+
+    // If not JWT format, try base64 decode directly
+    try {
+      const decoded = Buffer.from(tokenToDecode, "base64").toString("utf8");
+      // If it looks like JSON, parse it
+      if (decoded.startsWith("{") && decoded.endsWith("}")) {
+        return JSON.parse(decoded);
+      }
+      return { raw: decoded }; // Return raw decoded string
+    } catch (e) {
+      // Not base64 or not valid JSON, return as-is
+      return { raw: tokenToDecode };
+    }
+  } catch (error) {
+    console.error("Error decoding token:", error.message);
+    return null;
+  }
+}
+
+/**
  * Loggar in på Kleer och returnerar autentiseringstoken
  * @param {string} username - Användarnamn för Kleer
  * @param {string} password - Lösenord för Kleer
@@ -76,12 +117,79 @@ async function loginAndGetAuthToken(username, password) {
     }
 
     const token = authCookieMatch[1];
+
+    // Avkoda token och kontrollera om den innehåller felmeddelande
+    const decodedToken = decodeToken(token);
+    if (decodedToken) {
+      // Kontrollera om den avkodade token innehåller felmeddelande om inloggning
+      if (
+        decodedToken.raw &&
+        typeof decodedToken.raw === "string" &&
+        decodedToken.raw.includes("Felaktig e-postadress och/eller lösenord")
+      ) {
+        throw new Error(
+          "Inloggning misslyckades: Felaktig e-postadress och/eller lösenord"
+        );
+      }
+
+      // Om vi har ett message-fält i den avkodade token
+      if (
+        decodedToken.message &&
+        typeof decodedToken.message === "string" &&
+        decodedToken.message.includes(
+          "Felaktig e-postadress och/eller lösenord"
+        )
+      ) {
+        throw new Error(
+          "Inloggning misslyckades: Felaktig e-postadress och/eller lösenord"
+        );
+      }
+
+      // Sök efter fält 'message' i eventuella nestlade objekt i token
+      const checkForErrorMessage = (obj) => {
+        if (obj && typeof obj === "object") {
+          for (const [key, value] of Object.entries(obj)) {
+            if (
+              key === "message" &&
+              typeof value === "string" &&
+              value.includes("Felaktig e-postadress och/eller lösenord")
+            ) {
+              throw new Error(
+                "Inloggning misslyckades: Felaktig e-postadress och/eller lösenord"
+              );
+            }
+            if (value && typeof value === "object") {
+              checkForErrorMessage(value);
+            }
+          }
+        }
+      };
+
+      // Kontrollera alla objekt i token för felmeddelande
+      checkForErrorMessage(decodedToken);
+    }
+
     return token;
   } catch (error) {
     console.error("Error under inloggningsförsöket:", error.message);
     if (error.response) {
       console.error("Response status:", error.response.status);
-      console.error("Response data:", error.response.data);
+
+      // Kontrollera om svaret innehåller ett felmeddelande om felaktig inloggning
+      if (error.response.data && error.response.data.message) {
+        if (
+          error.response.data.message.includes(
+            "Felaktig e-postadress och/eller lösenord"
+          )
+        ) {
+          throw new Error(
+            "Inloggning misslyckades: Felaktig e-postadress och/eller lösenord"
+          );
+        }
+        console.error("Response message:", error.response.data.message);
+      } else {
+        console.error("Response data:", error.response.data);
+      }
     }
     throw error;
   }
@@ -644,7 +752,7 @@ if (process.argv[1] === new URL(import.meta.url).pathname) {
   const username = process.argv[2] || "";
   const password = process.argv[3] || "";
   const year = parseInt(process.argv[4] || new Date().getFullYear());
-  const outputPath = process.argv[5] || null;
+  const outputPath = process.argv[5] || "kleerData.json";
 
   if (!username || !password) {
     console.error("❌ Både användarnamn och lösenord måste anges som argument");
