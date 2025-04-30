@@ -31,7 +31,7 @@ app.post("/api/kleer/year-data", async (req, res) => {
     const yearToFetch = year || new Date().getFullYear();
     console.log(`Hämtar data för år ${yearToFetch}...`);
 
-    // Anropa funktionen från kleerOneStep.js UTAN att spara till fil
+    // Anropa funktionen från kleerOneStep.js utan att spara till fil
     const data = await getKleerYearDataWithCredentials(
       username,
       password,
